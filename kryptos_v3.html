@@ -6,7 +6,7 @@
 <title>KRYPTOS — Signal Intelligence</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/lightweight-charts/4.1.3/lightweight-charts.standalone.production.js"></script>
+
 <style>
 :root {
   --bg:     #080a0f;
@@ -607,7 +607,7 @@ let lastWin = null, sigFired = {};
 let c4h=[], c1h=[], c5m=[], liveK=null;
 let mkt = {funding:null,oi:null,fg:null,ls:null};
 // Chart
-let chart=null, candleSeries=null, volSeries=null, curTF='4h';
+let curTF='4h', chartData=[], chartAnimFrame=null;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -667,13 +667,13 @@ function connect4H(){
     const phc=$('ph-chg');
     phc.textContent=`${chg>=0?'+':''}${chg.toFixed(3)}% vs window open`;
     phc.className='ph-chg '+(chg>=0?'up':'down');
-    // Update chart only if showing 4h
-    if(candleSeries&&curTF==='4h'){
-      try{
-        const t=Math.floor(parseInt(k.t)/1000);
-        candleSeries.update({time:t,open:parseFloat(k.o),high:parseFloat(k.h),low:parseFloat(k.l),close:price});
-        if(volSeries)volSeries.update({time:t,value:parseFloat(k.v),color:price>=parseFloat(k.o)?'rgba(16,217,160,.4)':'rgba(240,67,106,.4)'});
-      }catch{}
+    // Update chart live for 4H
+    if(curTF==='4h'&&chartData.length){
+      const last=chartData[chartData.length-1];
+      if(last&&parseInt(last[0])===parseInt(k.t)){
+        chartData[chartData.length-1]=[k.t,k.o,k.h,k.l,k.c,k.v];
+      }
+      drawCanvas();
     }
     if(k.x){ c4h.push([k.t,k.o,k.h,k.l,k.c,k.v]); if(c4h.length>200)c4h.shift(); updateMTF(); }
   };
@@ -693,13 +693,12 @@ function connectChartWS(tf){
       wsChart=new WebSocket(`wss://fstream.binance.com/ws/btcusdt@kline_${tf}`);
       wsChart.onmessage=e=>{
         const k=JSON.parse(e.data).k;
-        if(candleSeries&&curTF===tf){
-          try{
-            const t=Math.floor(parseInt(k.t)/1000);
-            const price=parseFloat(k.c);
-            candleSeries.update({time:t,open:parseFloat(k.o),high:parseFloat(k.h),low:parseFloat(k.l),close:price});
-            if(volSeries)volSeries.update({time:t,value:parseFloat(k.v),color:price>=parseFloat(k.o)?'rgba(16,217,160,.4)':'rgba(240,67,106,.4)'});
-          }catch{}
+        if(curTF===tf&&chartData.length){
+          const last=chartData[chartData.length-1];
+          if(last&&parseInt(last[0])===parseInt(k.t)){
+            chartData[chartData.length-1]=[k.t,k.o,k.h,k.l,k.c,k.v];
+          }
+          drawCanvas();
         }
         if(tf==='5m'&&k.x){ c5m.push([k.t,k.o,k.h,k.l,k.c,k.v]); if(c5m.length>100)c5m.shift(); updateMTF(); }
         if(tf==='1h'&&k.x){ c1h.push([k.t,k.o,k.h,k.l,k.c,k.v]); if(c1h.length>100)c1h.shift(); updateMTF(); }
@@ -755,7 +754,7 @@ async function loadCandles(){
   updateMTF();
   // Draw chart — wait for chart to be initialized
   const drawWhenReady=(data)=>{
-    if(chart&&candleSeries){ drawChart(data); }
+    if($('chart')&&$('chart').querySelector('canvas')){ drawChart(data); }
     else{ setTimeout(()=>drawWhenReady(data), 300); }
   };
   if(curTF==='4h'&&d4h)drawWhenReady(d4h);
@@ -769,40 +768,123 @@ async function loadCandles(){
 function initChart(){
   const el=$('chart');
   if(!el)return;
-  if(typeof LightweightCharts==='undefined'){
-    // Library not loaded yet, retry in 500ms
-    setTimeout(initChart, 500); return;
-  }
-  const w=el.getBoundingClientRect().width||el.offsetWidth||600;
-  chart=LightweightCharts.createChart(el,{
-    width:w, height:280,
-    layout:{background:{type:'Solid',color:'#0d1017'},textColor:'#475569'},
-    grid:{vertLines:{color:'#1e2537'},horzLines:{color:'#1e2537'}},
-    crosshair:{mode:LightweightCharts.CrosshairMode.Normal,vertLine:{color:'#6c8eff',labelBackgroundColor:'#131720'},horzLine:{color:'#6c8eff',labelBackgroundColor:'#131720'}},
-    rightPriceScale:{borderColor:'#1e2537'},
-    timeScale:{borderColor:'#1e2537',timeVisible:true,secondsVisible:false},
-  });
-  candleSeries=chart.addCandlestickSeries({
-    upColor:'#10d9a0',downColor:'#f0436a',
-    borderUpColor:'#10d9a0',borderDownColor:'#f0436a',
-    wickUpColor:'#10d9a0',wickDownColor:'#f0436a',
-  });
-  volSeries=chart.addHistogramSeries({
-    priceFormat:{type:'volume'}, priceScaleId:'vol',
-    scaleMargins:{top:0.85,bottom:0},
-  });
-  new ResizeObserver(()=>{ try{ const w2=el.getBoundingClientRect().width||el.offsetWidth; if(w2>0)chart.resize(w2,280); }catch{} }).observe(el);
+  // Replace div with canvas
+  el.innerHTML='';
+  const canvas=document.createElement('canvas');
+  canvas.style.cssText='width:100%;height:280px;display:block;cursor:crosshair';
+  el.appendChild(canvas);
+  // Set pixel dimensions
+  const resize=()=>{
+    const rect=canvas.getBoundingClientRect();
+    canvas.width=rect.width*devicePixelRatio;
+    canvas.height=280*devicePixelRatio;
+    drawCanvas();
+  };
+  new ResizeObserver(resize).observe(canvas);
+  setTimeout(resize,100);
 }
 
 function drawChart(data){
-  if(!candleSeries)return;
-  try{
-    const candles=data.map(c=>({time:Math.floor(parseInt(c[0])/1000),open:parseFloat(c[1]),high:parseFloat(c[2]),low:parseFloat(c[3]),close:parseFloat(c[4])}));
-    const vols=data.map(c=>({time:Math.floor(parseInt(c[0])/1000),value:parseFloat(c[5]),color:parseFloat(c[4])>=parseFloat(c[1])?'rgba(16,217,160,.35)':'rgba(240,67,106,.35)'}));
-    candleSeries.setData(candles);
-    volSeries.setData(vols);
-    chart.timeScale().fitContent();
-  }catch(e){}
+  if(!data||!data.length)return;
+  chartData=data.slice(-80); // last 80 candles
+  drawCanvas();
+}
+
+function drawCanvas(){
+  const el=$('chart');
+  if(!el)return;
+  const canvas=el.querySelector('canvas');
+  if(!canvas||!chartData.length)return;
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width, H=canvas.height;
+  const dpr=devicePixelRatio||1;
+  ctx.clearRect(0,0,W,H);
+
+  // Background
+  ctx.fillStyle='#0d1017'; ctx.fillRect(0,0,W,H);
+
+  // Grid lines
+  ctx.strokeStyle='#1e2537'; ctx.lineWidth=1;
+  for(let i=1;i<5;i++){
+    const y=Math.round(H*i/5)+0.5;
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+  }
+
+  const n=chartData.length;
+  const priceArea={left:0,right:W-60*dpr,top:20*dpr,bottom:H-30*dpr};
+  const ph=priceArea.bottom-priceArea.top;
+  const pw=priceArea.right-priceArea.left;
+
+  // Price range
+  let minP=Infinity,maxP=-Infinity;
+  chartData.forEach(c=>{
+    minP=Math.min(minP,parseFloat(c[3]));
+    maxP=Math.max(maxP,parseFloat(c[2]));
+  });
+  const pad=(maxP-minP)*0.05;
+  minP-=pad; maxP+=pad;
+  const pRange=maxP-minP||1;
+
+  const toY=p=>priceArea.top+(1-(p-minP)/pRange)*ph;
+  const cW=Math.max(2,Math.floor(pw/n)-1);
+  const gap=pw/n;
+
+  // Volume (bottom 20% of chart)
+  const vols=chartData.map(c=>parseFloat(c[5]));
+  const maxV=Math.max(...vols)||1;
+  const volH=ph*0.18;
+
+  // Draw candles
+  chartData.forEach((c,i)=>{
+    const o=parseFloat(c[1]),h=parseFloat(c[2]),l=parseFloat(c[3]),cl=parseFloat(c[4]),v=parseFloat(c[5]);
+    const bull=cl>=o;
+    const x=priceArea.left+i*gap+gap/2;
+    const xRound=Math.round(x);
+    const color=bull?'#10d9a0':'#f0436a';
+    const colorA=bull?'rgba(16,217,160,.35)':'rgba(240,67,106,.35)';
+
+    // Volume bar
+    const vBarH=(v/maxV)*volH;
+    ctx.fillStyle=colorA;
+    ctx.fillRect(Math.round(x-cW/2),priceArea.bottom-vBarH,cW,vBarH);
+
+    // Wick
+    ctx.strokeStyle=color; ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.moveTo(xRound+0.5,toY(h));
+    ctx.lineTo(xRound+0.5,toY(l));
+    ctx.stroke();
+
+    // Body
+    const bodyTop=toY(Math.max(o,cl));
+    const bodyBot=toY(Math.min(o,cl));
+    const bodyH=Math.max(1,bodyBot-bodyTop);
+    ctx.fillStyle=color;
+    ctx.fillRect(Math.round(x-cW/2),bodyTop,cW,bodyH);
+  });
+
+  // Price labels (right axis)
+  ctx.fillStyle='#475569'; ctx.font=`${11*dpr}px Space Mono, monospace`; ctx.textAlign='left';
+  for(let i=0;i<=4;i++){
+    const p=minP+(pRange*i/4);
+    const y=toY(p);
+    ctx.fillText('$'+p.toLocaleString('en-US',{maximumFractionDigits:0}), priceArea.right+4*dpr, y+4*dpr);
+    ctx.strokeStyle='#1e2537'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.setLineDash([4,4]);
+    ctx.moveTo(0,y); ctx.lineTo(priceArea.right,y);
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  // Time labels (bottom)
+  ctx.fillStyle='#475569'; ctx.textAlign='center';
+  const step=Math.max(1,Math.floor(n/6));
+  for(let i=0;i<n;i+=step){
+    const c=chartData[i];
+    const x=priceArea.left+i*gap+gap/2;
+    const d=new Date(parseInt(c[0]));
+    const label=d.toISOString().substr(11,5);
+    ctx.fillText(label,x,H-6*dpr);
+  }
 }
 
 async function switchTF(tf){
