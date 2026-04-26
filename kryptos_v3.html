@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kryptos — BTC Signal</title>
+<style>
+:root{
+  --bg:#0b0c0f;--s1:#12141a;--s2:#1a1d26;--s3:#22263a;
+  --b1:#2a2e42;--b2:#3a3e52;
+  --t1:#e8eaf0;--t2:#aeb3cc;--t3:#6b7099;
+  --grn:#0fd9a0;--red:#ff4560;--acc:#7c6fff;--yel:#f5c542;
+  --grn-a:rgba(15,217,160,.12);--red-a:rgba(255,69,96,.12);--acc-a:rgba(124,111,255,.12);
+  --sans:'Inter',system-ui,sans-serif;--mono:'JetBrains Mono','Courier New',monospace;
+  --r:10px;--rsm:6px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--t1);font-family:var(--sans);font-size:14px;min-height:100vh;overflow-x:hidden}
+/* layout */
+.app{display:grid;grid-template-columns:320px 1fr 300px;gap:12px;padding:12px;max-width:1400px;margin:0 auto;min-height:100vh}
+.col{display:flex;flex-direction:column;gap:10px}
+/* cards */
+.card{background:var(--s1);border:1px solid var(--b1);border-radius:var(--r);padding:14px 16px}
+.clabel{display:flex;justify-content:space-between;align-items:center;font-size:10px;font-weight:700;letter-spacing:1.2px;color:var(--t3);text-transform:uppercase;margin-bottom:12px}
+.cbadge{background:var(--s2);border:1px solid var(--b1);border-radius:4px;font-size:9px;padding:2px 7px;color:var(--t2);letter-spacing:.5px}
+/* signal hero */
+.sig-hero{border-radius:var(--r);padding:20px;text-align:center;border:1px solid var(--b1);background:var(--s2);transition:all .4s}
+.sig-hero.up{border-color:var(--grn);background:rgba(15,217,160,.06)}
+.sig-hero.down{border-color:var(--red);background:rgba(255,69,96,.06)}
+.sig-hero.skip{border-color:var(--yel);background:rgba(245,197,66,.06)}
+.sig-arr{font-size:36px;display:block;line-height:1.1;margin-bottom:4px}
+.sig-word{font-size:22px;font-weight:800;letter-spacing:2px}
+.sig-word.up{color:var(--grn)}.sig-word.down{color:var(--red)}.sig-word.skip{color:var(--yel)}.sig-word.wait{color:var(--t3)}
+.sig-sub{font-size:11px;color:var(--t3);margin-top:6px;font-family:var(--mono)}
+.sig-score{font-size:13px;font-family:var(--mono);color:var(--t2);margin-top:10px}
+.sig-conf{font-size:11px;color:var(--t3);margin-top:3px}
+/* score bar */
+.sbar-wrap{height:6px;background:var(--s3);border-radius:3px;margin:12px 0;position:relative;overflow:hidden}
+.sbar-mid{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--b2)}
+.sbar-fill{position:absolute;top:0;bottom:0;border-radius:3px;transition:all .4s}
+/* factors */
+.factor{display:grid;grid-template-columns:1fr auto;gap:4px;padding:8px 10px;border-radius:var(--rsm);border:1px solid var(--b1);background:var(--s2);margin-bottom:5px}
+.factor.bull{border-color:rgba(15,217,160,.3);background:rgba(15,217,160,.04)}
+.factor.bear{border-color:rgba(255,69,96,.3);background:rgba(255,69,96,.04)}
+.fn{font-size:10px;font-weight:600;color:var(--t2);letter-spacing:.5px;text-transform:uppercase}
+.fv{font-size:10px;color:var(--t3);margin-top:1px;font-family:var(--mono)}
+.fs{font-size:12px;font-weight:800;font-family:var(--mono);align-self:center}
+.fs.bull{color:var(--grn)}.fs.bear{color:var(--red)}.fs.neu{color:var(--t3)}
+/* window timer */
+.win-card{text-align:center;padding:16px}
+.win-time{font-size:28px;font-family:var(--mono);font-weight:700;letter-spacing:2px}
+.win-label{font-size:9px;color:var(--t3);letter-spacing:1px;text-transform:uppercase;margin-top:2px}
+.win-range{font-size:11px;color:var(--t3);font-family:var(--mono);margin-top:8px}
+.pbar{height:4px;background:var(--s3);border-radius:2px;margin-top:10px;position:relative;overflow:hidden}
+.pbar-fill{height:100%;background:var(--acc);border-radius:2px;transition:width .5s linear}
+.pbar-sig{font-size:9px;color:var(--acc);margin-top:4px;letter-spacing:.5px}
+/* price hero */
+.price-big{font-size:34px;font-family:var(--mono);font-weight:700;letter-spacing:1px}
+.price-chg{font-size:13px;font-family:var(--mono);margin-top:3px}
+.price-chg.up{color:var(--grn)}.price-chg.down{color:var(--red)}
+/* mkt grid */
+.mkt-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.mstat{background:var(--s2);border:1px solid var(--b1);border-radius:var(--rsm);padding:10px 12px}
+.mstat-label{font-size:9px;color:var(--t3);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px}
+.mstat-val{font-size:14px;font-family:var(--mono);font-weight:600}
+.mstat-sub{font-size:9px;color:var(--t3);margin-top:2px}
+/* log */
+.log-entry{font-size:10px;font-family:var(--mono);padding:4px 0;border-bottom:1px solid var(--b1);display:flex;gap:8px}
+.log-ts{color:var(--t3);flex-shrink:0}.log-ok{color:var(--grn)}.log-warn{color:var(--yel)}.log-err{color:var(--red)}
+/* history pills */
+.hp{border-radius:var(--rsm);padding:10px 12px;cursor:pointer;border:1px solid transparent;transition:all .2s;margin-bottom:5px}
+.hp:hover{border-color:var(--b2);transform:translateY(-1px)}
+.hp.correct{background:var(--grn-a);border-color:rgba(15,217,160,.2)}
+.hp.wrong{background:var(--red-a);border-color:rgba(255,69,96,.2)}
+.hp.pending{background:rgba(245,197,66,.08);border-color:rgba(245,197,66,.2)}
+.hp-top{display:flex;justify-content:space-between;align-items:center}
+.hp-dir{font-size:12px;font-weight:700;letter-spacing:1px}
+.hp-dir.up{color:var(--grn)}.hp-dir.down{color:var(--red)}
+.hp-result{font-size:10px;font-weight:600;letter-spacing:1px}
+.hp-result.correct{color:var(--grn)}.hp-result.wrong{color:var(--red)}.hp-result.pending{color:var(--yel)}
+.hp-meta{font-size:9px;color:var(--t3);font-family:var(--mono);margin-top:4px}
+.hp-click{font-size:8px;color:var(--t3);text-align:right;margin-top:3px;letter-spacing:.5px}
+/* acc bar */
+.acc-bar{display:flex;height:5px;border-radius:3px;overflow:hidden;margin:8px 0 6px}
+.acc-grn{background:var(--grn);transition:width .5s}
+.acc-red{background:var(--red);transition:width .5s}
+.acc-text{display:flex;justify-content:space-between;font-size:10px;font-family:var(--mono)}
+/* calendar */
+.cal-hdr{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:3px}
+.cal-dl{font-size:8px;color:var(--t3);text-align:center;font-weight:600}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.cal-day{aspect-ratio:1;border-radius:4px;background:var(--s2);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:8px;cursor:pointer;border:1px solid transparent;transition:all .15s;min-height:26px}
+.cal-day:hover{border-color:var(--b2)}.cal-day.today{border-color:var(--acc)!important}
+.cal-day.empty{background:transparent;cursor:default}
+.cal-day.win{background:rgba(15,217,160,.1);border-color:rgba(15,217,160,.2)}
+.cal-day.loss{background:rgba(255,69,96,.1);border-color:rgba(255,69,96,.2)}
+.cal-dn{color:var(--t3)}.cal-pnl{font-size:7px;font-family:var(--mono);font-weight:600;margin-top:1px}
+/* result btns */
+.result-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.btn-win{background:var(--grn-a);border:1px solid var(--grn);color:var(--grn);border-radius:var(--rsm);padding:11px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sans);letter-spacing:1px;transition:all .2s}
+.btn-win:hover{background:rgba(15,217,160,.25)}
+.btn-loss{background:var(--red-a);border:1px solid var(--red);color:var(--red);border-radius:var(--rsm);padding:11px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sans);letter-spacing:1px;transition:all .2s}
+.btn-loss:hover{background:rgba(255,69,96,.25)}
+/* bankroll input */
+.bk-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.bk-label{font-size:10px;color:var(--t3);white-space:nowrap}
+.bk-input{background:var(--s2);border:1px solid var(--b1);border-radius:var(--rsm);color:var(--t1);font-family:var(--mono);font-size:13px;padding:6px 10px;width:100%;outline:none}
+.bk-input:focus{border-color:var(--acc)}
+/* run now btn */
+.run-btn{width:100%;background:var(--acc-a);border:1px solid var(--acc);border-radius:var(--rsm);color:var(--acc);font-family:var(--sans);font-size:11px;font-weight:700;padding:10px;cursor:pointer;letter-spacing:1px;transition:all .2s;margin-top:10px}
+.run-btn:hover{background:rgba(124,111,255,.25)}
+.run-btn:disabled{opacity:.5;cursor:not-allowed}
+/* modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(4px)}
+.modal{background:var(--s1);border:1px solid var(--b1);border-radius:14px;width:min(680px,95vw);max-height:85vh;display:flex;flex-direction:column;overflow:hidden}
+.modal-hdr{padding:20px 22px 16px;border-bottom:1px solid var(--b1);display:flex;justify-content:space-between;align-items:flex-start}
+.modal-title{font-size:17px;font-weight:700}
+.modal-sub{font-size:11px;color:var(--t3);font-family:var(--mono);margin-top:3px}
+.modal-close{background:var(--s2);border:1px solid var(--b1);border-radius:50%;width:28px;height:28px;color:var(--t2);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s}
+.modal-close:hover{border-color:var(--red);color:var(--red)}
+.modal-body{padding:20px 22px;overflow-y:auto;flex:1;scrollbar-width:thin;scrollbar-color:var(--b1) transparent}
+.mbanner{border-radius:10px;padding:14px 18px;text-align:center;margin-bottom:18px}
+.mbanner.correct{background:var(--grn-a);border:1px solid rgba(15,217,160,.3)}
+.mbanner.wrong{background:var(--red-a);border:1px solid rgba(255,69,96,.3)}
+.mbanner.pending{background:rgba(245,197,66,.08);border:1px solid rgba(245,197,66,.2)}
+.mb-em{font-size:28px;display:block;margin-bottom:4px}
+.mb-txt{font-size:15px;font-weight:700}
+.mb-sub{font-size:10px;color:var(--t3);margin-top:4px;font-family:var(--mono)}
+.msec{margin-bottom:18px}
+.msec-title{font-size:9px;font-weight:700;letter-spacing:1.5px;color:var(--t3);text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--b1)}
+.mfact-grid{display:flex;flex-direction:column;gap:5px}
+.mfact{display:grid;grid-template-columns:140px 1fr auto;gap:8px;align-items:center;padding:8px 10px;border-radius:var(--rsm);border:1px solid var(--b1);background:var(--s2)}
+.mfact.bull{border-color:rgba(15,217,160,.3);background:rgba(15,217,160,.04)}
+.mfact.bear{border-color:rgba(255,69,96,.3);background:rgba(255,69,96,.04)}
+.mfact-n{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--t2)}
+.mfact-v{font-size:10px;color:var(--t3);font-family:var(--mono)}
+.mfact-s{font-size:13px;font-weight:800;font-family:var(--mono)}
+.mfact-s.bull{color:var(--grn)}.mfact-s.bear{color:var(--red)}.mfact-s.neu{color:var(--t3)}
+.mstats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}
+.mstat2{background:var(--s2);border:1px solid var(--b1);border-radius:var(--rsm);padding:10px 12px}
+.mstat2-l{font-size:9px;color:var(--t3);letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px}
+.mstat2-v{font-size:14px;font-family:var(--mono);font-weight:600}
+/* sources */
+.src{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--b1);font-size:10px}
+.src-name{color:var(--t2)}.src-ok{color:var(--grn)}.src-err{color:var(--red)}
+/* scrollbar */
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--b2);border-radius:2px}
+/* clock */
+#clock{font-size:10px;font-family:var(--mono);color:var(--t3);text-align:center;padding:6px 0;letter-spacing:1px}
+@media(max-width:1100px){.app{grid-template-columns:280px 1fr 260px}}
+@media(max-width:800px){.app{grid-template-columns:1fr};.col:nth-child(3){order:-1}}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ── LEFT COLUMN ─────────────────────────────────────────────────────── -->
+<div class="col">
+
+  <div id="clock">--:--:-- UTC</div>
+
+  <!-- Signal Hero -->
+  <div class="card">
+    <div class="clabel">4H Signal <span class="cbadge" id="f-badge">—/29</span></div>
+    <div class="sig-hero" id="sig-hero">
+      <span class="sig-arr" id="sig-arr">◈</span>
+      <div class="sig-word wait" id="sig-word">WAITING</div>
+      <div class="sig-sub" id="sig-sub">Signal fires at +30 min</div>
+      <div class="sbar-wrap"><div class="sbar-mid"></div><div class="sbar-fill" id="sbar" style="left:50%;width:0%"></div></div>
+      <div class="sig-score" id="sig-score">Score: —</div>
+      <div class="sig-conf" id="sig-conf">Confidence: —</div>
+    </div>
+    <div id="factors" style="margin-top:12px;display:flex;flex-direction:column;gap:0"></div>
+    <button class="run-btn" id="run-btn" onclick="triggerNow()">⚡ RUN SIGNAL NOW</button>
+  </div>
+
+</div>
+
+<!-- ── MID COLUMN ──────────────────────────────────────────────────────── -->
+<div class="col">
+
+  <!-- Price + window timer -->
+  <div class="card win-card">
+    <div class="price-big" id="price">$——,———</div>
+    <div class="price-chg" id="price-chg">Loading…</div>
+    <div style="margin-top:14px">
+      <div class="win-time" id="wcd">0:00:00</div>
+      <div class="win-label">TIME REMAINING IN WINDOW</div>
+      <div class="win-range" id="wrange">— → — UTC</div>
+    </div>
+    <div class="pbar"><div class="pbar-fill" id="pbar" style="width:0%"></div></div>
+    <div class="pbar-sig" id="psig">+30m signal pending</div>
+  </div>
+
+  <!-- Market stats -->
+  <div class="card">
+    <div class="clabel">Market Data</div>
+    <div class="mkt-grid">
+      <div class="mstat">
+        <div class="mstat-label">Funding Rate</div>
+        <div class="mstat-val" id="ms-fund">—</div>
+        <div class="mstat-sub" id="ms-fund-sub">8h rate</div>
+      </div>
+      <div class="mstat">
+        <div class="mstat-label">Open Interest</div>
+        <div class="mstat-val" id="ms-oi">—</div>
+        <div class="mstat-sub" id="ms-oi-sub">USDT</div>
+      </div>
+      <div class="mstat">
+        <div class="mstat-label">L/S Ratio</div>
+        <div class="mstat-val" id="ms-ls">—</div>
+        <div class="mstat-sub" id="ms-ls-sub">global accounts</div>
+      </div>
+      <div class="mstat">
+        <div class="mstat-label">Fear & Greed</div>
+        <div class="mstat-val" id="ms-fg">—</div>
+        <div class="mstat-sub" id="ms-fg-sub">index</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Session performance -->
+  <div class="card">
+    <div class="clabel">Session <span class="cbadge" id="sess-badge">0 signals</span></div>
+    <div class="mkt-grid">
+      <div class="mstat">
+        <div class="mstat-label">Win Rate</div>
+        <div class="mstat-val" id="sess-wr">—</div>
+        <div class="mstat-sub">this session</div>
+      </div>
+      <div class="mstat">
+        <div class="mstat-label">P&L</div>
+        <div class="mstat-val" id="sess-pnl">$0</div>
+        <div class="mstat-sub">net profit/loss</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div class="card">
+    <div class="clabel">System Log</div>
+    <div id="log-list" style="max-height:160px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--b1) transparent"></div>
+  </div>
+
+</div>
+
+<!-- ── RIGHT COLUMN ────────────────────────────────────────────────────── -->
+<div class="col">
+
+  <!-- Bankroll + bet -->
+  <div class="card">
+    <div class="clabel">Bet Setup</div>
+    <div class="bk-row">
+      <span class="bk-label">Bankroll $</span>
+      <input class="bk-input" id="bk-input" type="number" value="100" min="1" oninput="onBankroll()">
+    </div>
+    <div class="mkt-grid" style="margin-bottom:10px">
+      <div class="mstat">
+        <div class="mstat-label">Bet Size</div>
+        <div class="mstat-val" id="bet-amt">—</div>
+        <div class="mstat-sub" id="bet-pct">—% of bankroll</div>
+      </div>
+      <div class="mstat">
+        <div class="mstat-label">Polymarket Odds</div>
+        <div class="mstat-val" id="odds-disp">—¢</div>
+        <div class="mstat-sub" id="odds-sub">UP direction</div>
+      </div>
+    </div>
+    <div class="result-btns">
+      <button class="btn-win"  onclick="logResult('win')">▲ WIN</button>
+      <button class="btn-loss" onclick="logResult('loss')">▼ LOSS</button>
+    </div>
+  </div>
+
+  <!-- Prediction History -->
+  <div class="card">
+    <div class="clabel">
+      Prediction History
+      <div style="display:flex;gap:6px;align-items:center">
+        <span class="cbadge" id="hist-acc">—% acc</span>
+        <button onclick="clearHistory()" style="background:none;border:1px solid var(--b1);border-radius:4px;color:var(--t3);font-size:8px;padding:2px 6px;cursor:pointer;font-family:var(--sans)">Clear</button>
+      </div>
+    </div>
+    <div class="acc-bar" id="acc-bar"><div class="acc-grn" id="acc-grn" style="width:0%"></div><div class="acc-red" id="acc-red" style="width:0%"></div></div>
+    <div class="acc-text" id="acc-text" style="color:var(--t3)"><span>—</span><span>—</span></div>
+    <div id="hist-list" style="margin-top:10px;max-height:260px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--b1) transparent"></div>
+    <div id="hist-empty" style="font-size:11px;color:var(--t3);text-align:center;padding:16px 0">No predictions yet. Data loads overnight.</div>
+  </div>
+
+  <!-- Calendar -->
+  <div class="card">
+    <div class="clabel">Monthly P&L <span class="cbadge" id="cal-badge">0 trades</span></div>
+    <div class="cal-hdr">
+      <div class="cal-dl">M</div><div class="cal-dl">T</div><div class="cal-dl">W</div>
+      <div class="cal-dl">T</div><div class="cal-dl">F</div><div class="cal-dl">S</div><div class="cal-dl">S</div>
+    </div>
+    <div class="cal-grid" id="cal-grid"></div>
+  </div>
+
+  <!-- Data sources -->
+  <div class="card">
+    <div class="clabel">Data Sources</div>
+    <div id="srcs"></div>
+  </div>
+
+</div>
+</div>
+
+<!-- MODAL -->
+<div id="modal-overlay" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-hdr">
+      <div>
+        <div class="modal-title" id="modal-title">—</div>
+        <div class="modal-sub"  id="modal-sub">—</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+// ── Config ─────────────────────────────────────────────────────────────────
+const WIN_SECS  = 4 * 3600;
+const SIG_AT    = 30 * 60;
+const MIN_CONF  = 68;
+const MIN_SCORE = 9;
+
+// ── State ──────────────────────────────────────────────────────────────────
+let BANKROLL = 100;
+let predHistory = [];
+let calData     = {};   // {YYYY-MM-DD: [{dir,outcome,pnl,betAmount}]}
+let sess        = {sigs:0, wins:0, losses:0, pnl:0};
+let mktCache    = {funding:null, oi:null, ls:null, fg:null};
+let lastDir     = null;
+let lastScore   = 0;
+let lastConf    = 0;
+let lastBetPct  = 1;
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const fmtP = v => '$'+parseFloat(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtK = v => { v=parseFloat(v); if(Math.abs(v)>=1e9)return(v/1e9).toFixed(2)+'B'; if(Math.abs(v)>=1e6)return(v/1e6).toFixed(2)+'M'; if(Math.abs(v)>=1e3)return(v/1e3).toFixed(1)+'K'; return v.toFixed(0); };
+const ts  = () => new Date().toISOString().substr(11,8);
+const ftm = d => new Date(d).toISOString().substr(11,5);
+const fday= d => new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+
+function log(msg, type='ok'){
+  const box = $('log-list');
+  const cls = type==='ok'?'log-ok':type==='warn'?'log-warn':'log-err';
+  const el  = document.createElement('div');
+  el.className='log-entry';
+  el.innerHTML=`<span class="log-ts">${ts()}</span><span class="${cls}">${msg}</span>`;
+  box.insertBefore(el,box.firstChild);
+  if(box.children.length>24)box.removeChild(box.lastChild);
+}
+
+// ── Clock ──────────────────────────────────────────────────────────────────
+setInterval(()=>{$('clock').textContent=new Date().toISOString().substr(11,8)+' UTC'},1000);
+
+// ── WebSocket — live price ─────────────────────────────────────────────────
+let wsConn = null;
+function connectWS(){
+  wsConn = new WebSocket('wss://fstream.binance.com/ws/btcusdt@kline_4h');
+  wsConn.onmessage = e => {
+    const d = JSON.parse(e.data).k;
+    const price = parseFloat(d.c);
+    const open  = parseFloat(d.o);
+    const chg   = (price-open)/open*100;
+    $('price').textContent = fmtP(price);
+    const el = $('price-chg');
+    el.textContent = `${chg>=0?'+':''}${chg.toFixed(3)}% this window`;
+    el.className   = 'price-chg ' + (chg>=0?'up':'down');
+  };
+  wsConn.onclose = ()=>{ log('WS reconnecting…','warn'); setTimeout(connectWS,3000); };
+  wsConn.onerror = ()=>{ wsConn.close(); };
+}
+
+// ── Window timer ───────────────────────────────────────────────────────────
+let lastWin = null, sigFired = {};
+function timerTick(){
+  const now = Date.now();
+  const ws  = Math.floor(now/(WIN_SECS*1000))*(WIN_SECS*1000);
+  const el  = (now-ws)/1000;
+  const rem = WIN_SECS - el;
+  const h   = Math.floor(rem/3600), m = Math.floor((rem%3600)/60), s = Math.floor(rem%60);
+  $('wcd').textContent  = `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  $('pbar').style.width = (el/WIN_SECS*100)+'%';
+  $('wrange').textContent = `${ftm(ws)} → ${ftm(ws+WIN_SECS*1000)} UTC`;
+  const done = el >= SIG_AT;
+  $('psig').textContent = done ? '✓ Signal fired' : `+30m signal in ${Math.max(0,Math.ceil(SIG_AT-el))}s`;
+  $('psig').style.color = done ? 'var(--grn)' : 'var(--acc)';
+  if(ws !== lastWin){
+    lastWin = ws;
+    sigFired[ws] = false;
+    resetSignal();
+    log(`New 4H window: ${ftm(ws)} UTC`,'warn');
+  }
+}
+setInterval(timerTick,1000);
+
+function resetSignal(){
+  const h = $('sig-hero');
+  h.className = 'sig-hero';
+  $('sig-arr').textContent  = '◈';
+  $('sig-word').textContent = 'WAITING';
+  $('sig-word').className   = 'sig-word wait';
+  $('sig-sub').textContent  = 'Signal fires at +30 min';
+  $('sig-score').textContent= 'Score: —';
+  $('sig-conf').textContent = 'Confidence: —';
+  $('sbar').style.cssText   = 'left:50%;width:0%;background:var(--acc)';
+  $('factors').innerHTML    = '';
+  $('f-badge').textContent  = '—/29';
+}
+
+// ── Render signal from API response ───────────────────────────────────────
+function renderSignal(data){
+  const dir   = data.direction;
+  const conf  = data.confidence;
+  const score = data.score;
+  const max   = data.maxScore || data.max_score || 29;
+  const items = data.factors || [];
+
+  lastDir    = dir;
+  lastScore  = score;
+  lastConf   = conf;
+  lastBetPct = data.betPct || (conf>=82?5:conf>=76?3:conf>=70?2:1);
+  onBankroll();
+
+  const h = $('sig-hero');
+  h.className = 'sig-hero '+(dir==='UP'?'up':dir==='DOWN'?'down':dir==='SKIP'?'skip':'');
+  $('sig-arr').textContent  = dir==='UP'?'▲':dir==='DOWN'?'▼':dir==='SKIP'?'◈':'◈';
+  $('sig-word').textContent = dir==='UP'?'BUY UP':dir==='DOWN'?'BUY DOWN':dir==='SKIP'?'SKIP':'WAITING';
+  $('sig-word').className   = 'sig-word '+(dir==='UP'?'up':dir==='DOWN'?'down':dir==='SKIP'?'skip':'wait');
+  $('sig-sub').textContent  = dir!=='SKIP'?`Confidence: ${conf}% | Score: ${score}/${max}`:`Score ${score}/${max} — below threshold, skipping`;
+  $('sig-score').textContent= `Score: ${score>0?'+':''}${score}/${max}`;
+  $('sig-conf').textContent = `Confidence: ${conf}%`;
+  $('f-badge').textContent  = `${score}/${max}`;
+
+  // Score bar
+  const pct = Math.abs(score)/max*50;
+  const sbar = $('sbar');
+  if(score > 0){ sbar.style.left='50%'; sbar.style.width=pct+'%'; sbar.style.background='var(--grn)'; }
+  else if(score < 0){ sbar.style.left=(50-pct)+'%'; sbar.style.width=pct+'%'; sbar.style.background='var(--red)'; }
+  else { sbar.style.left='50%'; sbar.style.width='0%'; }
+
+  // Render factor list
+  $('factors').innerHTML = items.map(it=>{
+    const cls = it.sc>0?'bull':it.sc<0?'bear':'';
+    const scCls = it.sc>0?'bull':it.sc<0?'bear':'neu';
+    return `<div class="factor ${cls}">
+      <div><div class="fn">${it.n}</div><div class="fv">${it.val||'—'}</div></div>
+      <div class="fs ${scCls}">${it.sc>0?'+':''}${it.sc}</div>
+    </div>`;
+  }).join('');
+
+  if(dir!=='SKIP') log(`Signal: ${dir} | Score ${score}/${max} | Conf ${conf}%`,'ok');
+  else log(`SKIP — score ${score}/${max} below threshold`,'warn');
+}
+
+// ── Fetch signal from backend ──────────────────────────────────────────────
+async function triggerNow(){
+  const btn = $('run-btn');
+  btn.textContent = '⏳ Analyzing…'; btn.disabled = true;
+  try{
+    const r = await fetch('/api/trigger');
+    if(!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    if(data.error) throw new Error(data.error);
+    renderSignal(data);
+    await loadHistory();
+  } catch(e){
+    log('Trigger failed: '+e.message,'err');
+  }
+  btn.textContent = '⚡ RUN SIGNAL NOW'; btn.disabled = false;
+}
+
+// ── Market data polling ────────────────────────────────────────────────────
+async function pollMkt(){
+  // Funding
+  try{
+    const r = await fetch('https://fapi.binance.com/fapi/v1/fundingRate?symbol=BTCUSDT&limit=1');
+    const d = await r.json();
+    const f = parseFloat(d[0].fundingRate)*100;
+    mktCache.funding = f;
+    $('ms-fund').textContent = f.toFixed(4)+'%';
+    $('ms-fund').style.color = f<0?'var(--grn)':f>0.03?'var(--red)':'var(--t1)';
+    $('ms-fund-sub').textContent = f<0?'Negative (bullish)':f>0.03?'Positive (bearish)':'Neutral';
+    updateSrc('Funding Rate','ok');
+  } catch(e){ updateSrc('Funding Rate','err'); }
+
+  // OI
+  try{
+    const r = await fetch('https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT');
+    const d = await r.json();
+    mktCache.oi = parseFloat(d.openInterest);
+    $('ms-oi').textContent = fmtK(mktCache.oi);
+    updateSrc('Open Interest','ok');
+  } catch(e){ updateSrc('Open Interest','err'); }
+
+  // L/S
+  try{
+    const r = await fetch('https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol=BTCUSDT&period=4h&limit=1');
+    const d = await r.json();
+    mktCache.ls = parseFloat(d[0].longShortRatio);
+    $('ms-ls').textContent = mktCache.ls.toFixed(3);
+    $('ms-ls').style.color = mktCache.ls<0.85?'var(--grn)':mktCache.ls>1.25?'var(--red)':'var(--t1)';
+    $('ms-ls-sub').textContent = mktCache.ls<1?'Short dominant':mktCache.ls>1.2?'Long heavy':'Balanced';
+    updateSrc('Long/Short','ok');
+  } catch(e){ updateSrc('Long/Short','err'); }
+
+  // Fear & Greed
+  try{
+    const r = await fetch('https://api.alternative.me/fng/?limit=1');
+    const d = await r.json();
+    const fg = parseInt(d.data[0].value);
+    mktCache.fg = fg;
+    $('ms-fg').textContent = fg;
+    $('ms-fg').style.color = fg<30?'var(--grn)':fg>70?'var(--red)':'var(--t1)';
+    $('ms-fg-sub').textContent = d.data[0].value_classification;
+    updateSrc('Fear & Greed','ok');
+  } catch(e){ updateSrc('Fear & Greed','err'); }
+}
+
+// ── Sources ────────────────────────────────────────────────────────────────
+const srcStatus = {};
+function updateSrc(name, status){
+  srcStatus[name] = status;
+  const names = ['Binance WS','Funding Rate','Open Interest','Long/Short','Fear & Greed','Polymarket'];
+  $('srcs').innerHTML = names.map(n=>{
+    const st = srcStatus[n]||'pending';
+    const cls= st==='ok'?'src-ok':st==='err'?'src-err':'';
+    const ic = st==='ok'?'●':st==='err'?'●':'○';
+    return `<div class="src"><span class="src-name">${n}</span><span class="${cls}">${ic} ${st}</span></div>`;
+  }).join('');
+}
+['Binance WS','Funding Rate','Open Interest','Long/Short','Fear & Greed','Polymarket'].forEach(n=>updateSrc(n,'pending'));
+
+// ── Bankroll / bet sizing ──────────────────────────────────────────────────
+function onBankroll(){
+  BANKROLL = parseFloat($('bk-input').value)||100;
+  const pct = lastBetPct;
+  const amt = BANKROLL * pct/100;
+  $('bet-amt').textContent   = '$'+amt.toFixed(2);
+  $('bet-pct').textContent   = pct+'% of bankroll';
+  $('odds-sub').textContent  = lastDir ? lastDir+' direction' : 'awaiting signal';
+}
+
+// ── Session ────────────────────────────────────────────────────────────────
+function logResult(outcome){
+  if(!lastDir){ log('No active signal to log','warn'); return; }
+  sess.sigs++;
+  const bet = BANKROLL * lastBetPct / 100;
+  const odds = 50; // default, user can note actual
+  let pnl;
+  if(outcome==='win'){ sess.wins++; pnl = bet * (100-odds)/odds; }
+  else { sess.losses++; pnl = -bet; }
+  sess.pnl += pnl;
+  // Add to calendar
+  const today = new Date().toISOString().substr(0,10);
+  if(!calData[today]) calData[today]=[];
+  calData[today].push({dir:lastDir,outcome,pnl,betAmount:bet,conf:lastConf,score:lastScore});
+  saveLocal();
+  updateSession();
+  renderCalendar();
+  log(`Result logged: ${outcome.toUpperCase()} ${pnl>=0?'+':''}$${pnl.toFixed(2)}`,'ok');
+}
+
+function updateSession(){
+  const total = sess.wins+sess.losses;
+  $('sess-badge').textContent = total+' signals';
+  $('sess-wr').textContent = total>0?Math.round(sess.wins/total*100)+'%':'—';
+  $('sess-pnl').textContent  = (sess.pnl>=0?'+':'')+fmtP(sess.pnl);
+  $('sess-pnl').style.color  = sess.pnl>=0?'var(--grn)':sess.pnl<0?'var(--red)':'var(--t2)';
+}
+
+// ── History ────────────────────────────────────────────────────────────────
+async function loadHistory(){
+  try{
+    const r = await fetch('/api/predictions');
+    if(!r.ok) return;
+    const data = await r.json();
+    predHistory = (data.predictions||[]).map(p=>({
+      dir: p.dir, conf: p.conf, score: p.score, maxScore: p.maxScore||29,
+      windowStart: p.windowStart, windowEnd: p.windowEnd,
+      signalTime: p.signalTime, openPrice: p.openPrice,
+      closePrice: p.closePrice, priceDiff: p.priceDiff,
+      result: p.result, factors: p.factors||[], marketData: p.marketData||{},
+      oddsUp: p.oddsUp, oddsDn: p.oddsDn, betPct: p.betPct,
+    }));
+    renderHistory();
+  } catch(e){ log('History load: '+e.message,'err'); }
+}
+
+function renderHistory(){
+  const list = $('hist-list');
+  const empty= $('hist-empty');
+  const resolved = predHistory.filter(p=>p.result&&p.result!=='pending');
+  const correct  = resolved.filter(p=>p.result==='correct').length;
+  const wrong    = resolved.filter(p=>p.result==='wrong').length;
+  const total    = correct+wrong;
+  // Accuracy bar
+  if(total>0){
+    const pctW = correct/total*100, pctL = wrong/total*100;
+    $('acc-grn').style.width = pctW+'%';
+    $('acc-red').style.width = pctL+'%';
+    $('acc-text').innerHTML  = `<span style="color:var(--grn)">${correct}W</span><span style="color:var(--t3)">${Math.round(pctW)}% accuracy</span><span style="color:var(--red)">${wrong}L</span>`;
+    $('hist-acc').textContent= Math.round(pctW)+'% acc';
+  }
+  if(!predHistory.length){ list.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+  list.innerHTML = predHistory.slice(0,20).map((p,i)=>{
+    const res = p.result||'pending';
+    const icon= res==='correct'?'✅':res==='wrong'?'❌':'⏳';
+    const ws  = new Date(p.windowStart);
+    const we  = new Date(p.windowEnd);
+    const diff= p.priceDiff?`${p.priceDiff>0?'+':''}$${parseFloat(p.priceDiff).toFixed(0)}`:'—';
+    return `<div class="hp ${res}" onclick="openPredModal(${i})">
+      <div class="hp-top">
+        <span class="hp-dir ${p.dir.toLowerCase()}">${p.dir==='UP'?'▲':'▼'} ${p.dir}</span>
+        <span class="hp-result ${res}">${icon} ${res.toUpperCase()}</span>
+      </div>
+      <div class="hp-meta">${ftm(ws)}–${ftm(we)} UTC · Score ${p.score}/${p.maxScore} · Conf ${p.conf}%</div>
+      <div class="hp-meta">Open: ${p.openPrice?fmtP(p.openPrice):'—'} → Close: ${p.closePrice?fmtP(p.closePrice):'—'} (${diff})</div>
+      <div class="hp-click">TAP FOR FULL DETAILS →</div>
+    </div>`;
+  }).join('');
+}
+
+function clearHistory(){
+  if(!confirm('Clear all history?')) return;
+  predHistory = [];
+  renderHistory();
+  log('History cleared','warn');
+}
+
+// ── Prediction modal ───────────────────────────────────────────────────────
+function openPredModal(i){
+  const p = predHistory[i];
+  if(!p) return;
+  const ws = new Date(p.windowStart), we = new Date(p.windowEnd);
+  const res= p.result||'pending';
+  const diff = p.priceDiff ? parseFloat(p.priceDiff) : null;
+
+  const bannerCls = res==='correct'?'correct':res==='wrong'?'wrong':'pending';
+  const bannerIc  = res==='correct'?'✅':res==='wrong'?'❌':'⏳';
+  const bannerTxt = res==='correct'?`CORRECT — ${p.dir} was right`:res==='wrong'?`WRONG — ${p.dir} was incorrect`:'PENDING — awaiting close';
+  const bannerSub = diff!==null?`Price moved ${diff>0?'+':''}$${diff.toFixed(2)} (${p.openPrice?((diff/p.openPrice)*100).toFixed(3):'?'}%)`:'—';
+
+  const bet = p.betPct ? (BANKROLL*p.betPct/100) : null;
+  const pnlStr = (bet&&diff!==null)? ((res==='correct'?(bet*0.9).toFixed(2):(-bet).toFixed(2))) : null;
+
+  const factorsHtml = (p.factors||[]).map(f=>{
+    const cls  = f.sc>0?'bull':f.sc<0?'bear':'';
+    const sCls = f.sc>0?'bull':f.sc<0?'bear':'neu';
+    return `<div class="mfact ${cls}">
+      <div class="mfact-n">${f.n}</div>
+      <div class="mfact-v">${f.val||'—'}</div>
+      <div class="mfact-s ${sCls}">${f.sc>0?'+':''}${f.sc}</div>
+    </div>`;
+  }).join('');
+
+  const md = p.marketData||{};
+  const body = `
+    <div class="mbanner ${bannerCls}">
+      <span class="mb-em">${bannerIc}</span>
+      <div class="mb-txt">${bannerTxt}</div>
+      <div class="mb-sub">${bannerSub}</div>
+    </div>
+    <div class="mstats">
+      <div class="mstat2"><div class="mstat2-l">Direction</div><div class="mstat2-v" style="color:${p.dir==='UP'?'var(--grn)':'var(--red)'}">${p.dir==='UP'?'▲':'▼'} ${p.dir}</div></div>
+      <div class="mstat2"><div class="mstat2-l">Score</div><div class="mstat2-v">${p.score}/${p.maxScore}</div></div>
+      <div class="mstat2"><div class="mstat2-l">Confidence</div><div class="mstat2-v">${p.conf}%</div></div>
+      <div class="mstat2"><div class="mstat2-l">Open Price</div><div class="mstat2-v">${p.openPrice?fmtP(p.openPrice):'—'}</div></div>
+      <div class="mstat2"><div class="mstat2-l">Close Price</div><div class="mstat2-v">${p.closePrice?fmtP(p.closePrice):'—'}</div></div>
+      <div class="mstat2"><div class="mstat2-l">Price Δ</div><div class="mstat2-v" style="color:${diff&&diff>0?'var(--grn)':diff&&diff<0?'var(--red)':'var(--t1)'}">${diff!==null?(diff>0?'+':'')+fmtP(diff):'—'}</div></div>
+    </div>
+    ${bet?`<div class="mstats">
+      <div class="mstat2"><div class="mstat2-l">Bet Size</div><div class="mstat2-v">$${bet.toFixed(2)}</div></div>
+      <div class="mstat2"><div class="mstat2-l">Bet %</div><div class="mstat2-v">${p.betPct}% bankroll</div></div>
+      <div class="mstat2"><div class="mstat2-l">P&L</div><div class="mstat2-v" style="color:${res==='correct'?'var(--grn)':'var(--red)'}">${pnlStr?`${res==='correct'?'+':'-'}$${Math.abs(pnlStr)}`:'—'}</div></div>
+    </div>`:''}
+    <div class="msec">
+      <div class="msec-title">14-Factor Breakdown</div>
+      <div class="mfact-grid">${factorsHtml||'<div style="color:var(--t3);font-size:11px">No factor data available</div>'}</div>
+    </div>
+    <div class="msec">
+      <div class="msec-title">Market Context at Signal Time</div>
+      <div class="mstats">
+        <div class="mstat2"><div class="mstat2-l">Funding</div><div class="mstat2-v">${md.funding!=null?(md.funding*100).toFixed(4)+'%':'—'}</div></div>
+        <div class="mstat2"><div class="mstat2-l">Fear &amp; Greed</div><div class="mstat2-v">${md.fg!=null?md.fg:'—'}</div></div>
+        <div class="mstat2"><div class="mstat2-l">L/S Ratio</div><div class="mstat2-v">${md.ls!=null?parseFloat(md.ls).toFixed(3):'—'}</div></div>
+      </div>
+    </div>`;
+
+  $('modal-title').textContent = `${p.dir==='UP'?'▲':'▼'} ${p.dir} Prediction`;
+  $('modal-sub').textContent   = `${ftm(ws)} → ${ftm(we)} UTC · ${fday(ws)}`;
+  $('modal-body').innerHTML    = body;
+  $('modal-overlay').style.display = 'flex';
+}
+
+function openModal(title, sub, body){
+  $('modal-title').textContent = title;
+  $('modal-sub').textContent   = sub;
+  $('modal-body').innerHTML    = body;
+  $('modal-overlay').style.display = 'flex';
+}
+
+function closeModal(){ $('modal-overlay').style.display='none'; }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape')closeModal(); });
+
+// ── Calendar ───────────────────────────────────────────────────────────────
+function renderCalendar(){
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  const firstDay = new Date(y,m,1).getDay(); // 0=Sun
+  const daysInMonth = new Date(y,m+1,0).getDate();
+  // Adjust for Mon-start
+  const offset = (firstDay+6)%7;
+  let html = '';
+  for(let i=0;i<offset;i++) html += '<div class="cal-day empty"></div>';
+  const todayStr = now.toISOString().substr(0,10);
+  let totalTrades = 0;
+  for(let d=1;d<=daysInMonth;d++){
+    const dateStr = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const trades  = calData[dateStr]||[];
+    totalTrades  += trades.length;
+    const pnl     = trades.reduce((s,t)=>s+t.pnl,0);
+    const isToday = dateStr===todayStr;
+    const cls     = trades.length>0?(pnl>=0?'win':'loss'):'';
+    html += `<div class="cal-day ${cls}${isToday?' today':''}" onclick="openCalModal('${dateStr}')">
+      <span class="cal-dn">${d}</span>
+      ${trades.length?`<span class="cal-pnl" style="color:${pnl>=0?'var(--grn)':'var(--red)'}">${pnl>=0?'+':''}${pnl.toFixed(0)}</span>`:''}
+    </div>`;
+  }
+  $('cal-grid').innerHTML = html;
+  $('cal-badge').textContent = totalTrades+' trades';
+}
+
+function openCalModal(dateStr){
+  const trades = calData[dateStr]||[];
+  if(!trades.length){ log('No trades on '+dateStr,'warn'); return; }
+  const pnl = trades.reduce((s,t)=>s+t.pnl,0);
+  const wins = trades.filter(t=>t.outcome==='win').length;
+  const header = `
+    <div class="mstats">
+      <div class="mstat2"><div class="mstat2-l">Trades</div><div class="mstat2-v">${trades.length}</div></div>
+      <div class="mstat2"><div class="mstat2-l">Win Rate</div><div class="mstat2-v">${Math.round(wins/trades.length*100)}%</div></div>
+      <div class="mstat2"><div class="mstat2-l">Net P&L</div><div class="mstat2-v" style="color:${pnl>=0?'var(--grn)':'var(--red)'}">${pnl>=0?'+':''}\$${pnl.toFixed(2)}</div></div>
+    </div>`;
+  const rows = trades.map((t,i)=>`
+    <div style="background:var(--s2);border:1px solid var(--b1);border-radius:var(--rsm);padding:12px 14px;margin-bottom:6px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-size:12px;font-weight:700;color:${t.dir==='UP'?'var(--grn)':'var(--red)'}">${t.dir==='UP'?'▲':'▼'} ${t.dir}</span>
+        <span style="font-size:11px;font-weight:700;color:${t.outcome==='win'?'var(--grn)':'var(--red)'}">${t.outcome==='win'?'✅ WIN':'❌ LOSS'}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:10px;font-family:var(--mono)">
+        <div><div style="color:var(--t3)">Bet</div><div>$${t.betAmount.toFixed(2)}</div></div>
+        <div><div style="color:var(--t3)">P&L</div><div style="color:${t.pnl>=0?'var(--grn)':'var(--red)'}">${t.pnl>=0?'+':''}$${t.pnl.toFixed(2)}</div></div>
+        <div><div style="color:var(--t3)">Conf</div><div>${t.conf||'?'}%</div></div>
+      </div>
+    </div>`).join('');
+  openModal(`📅 ${new Date(dateStr+'T12:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}`,
+    `${trades.length} trade${trades.length>1?'s':''} · ${wins}W ${trades.length-wins}L`,
+    header+rows);
+}
+
+// ── Persistence ────────────────────────────────────────────────────────────
+function saveLocal(){
+  try{ localStorage.setItem('kryptos_cal',JSON.stringify(calData)); } catch(e){}
+}
+function loadLocal(){
+  try{
+    const cd = localStorage.getItem('kryptos_cal');
+    if(cd) calData = JSON.parse(cd);
+  } catch(e){}
+}
+
+// ── Backfill ───────────────────────────────────────────────────────────────
+async function backfill(){
+  try{
+    const r = await fetch('/api/backfill');
+    const d = await r.json();
+    if(d.saved>0) log(`Backfilled ${d.saved} historical predictions`,'ok');
+  } catch(e){}
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+(async()=>{
+  loadLocal();
+  connectWS(); updateSrc('Binance WS','ok');
+  renderCalendar();
+  await backfill();
+  await loadHistory();
+  await pollMkt();
+  setInterval(pollMkt, 5*60*1000);
+  setInterval(loadHistory, 5*60*1000);
+  log('Kryptos v3.0 — 14-factor signal engine','ok');
+  log('Signals fire automatically at +30min each 4H window','ok');
+})();
+</script>
+</body>
+</html>
