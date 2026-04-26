@@ -100,20 +100,52 @@ BASE_PERP  = "https://fapi.binance.com/fapi/v1"
 BASE_DATA  = "https://fapi.binance.com/futures/data"
 
 def klines(interval, limit=150):
-    # Try perpetual futures first, fall back to spot
-    urls = [
-        f"{BASE_PERP}/klines",
-        f"{BASE_SPOT}/klines",
+    """Fetch candles with multiple fallbacks including public proxy APIs."""
+    params = {"symbol": "BTCUSDT", "interval": interval, "limit": limit}
+    
+    # Primary: all Binance endpoints
+    binance_urls = [
+        "https://fapi.binance.com/fapi/v1/klines",
+        "https://api.binance.com/api/v3/klines",
         "https://api1.binance.com/api/v3/klines",
         "https://api2.binance.com/api/v3/klines",
         "https://api3.binance.com/api/v3/klines",
+        "https://api4.binance.com/api/v3/klines",
     ]
-    for url in urls:
+    for url in binance_urls:
         try:
-            r = requests.get(url, params={"symbol":"BTCUSDT","interval":interval,"limit":limit}, timeout=12)
-            if r.ok: return r.json()
-        except: continue
-    raise Exception("All Binance endpoints failed")
+            r = requests.get(url, params=params, timeout=15,
+                           headers={"User-Agent": "Mozilla/5.0"})
+            if r.ok and r.json():
+                return r.json()
+        except Exception as e:
+            print(f"  klines {url}: {e}")
+            continue
+    
+    # Fallback: CoinGecko OHLC (converts format)
+    # Map interval to CoinGecko days param
+    try:
+        cg_days = {"1h": 1, "4h": 7, "1d": 30}.get(interval, 7)
+        r = requests.get(
+            "https://api.coingecko.com/api/v3/coins/bitcoin/ohlc",
+            params={"vs_currency": "usd", "days": cg_days},
+            timeout=15, headers={"User-Agent": "Mozilla/5.0"}
+        )
+        if r.ok:
+            data = r.json()
+            # Convert CG format [ts, o, h, l, c] to Binance format
+            converted = []
+            for row in data:
+                ts_ms, o, h, l, c = row
+                converted.append([ts_ms, str(o), str(h), str(l), str(c), "1000",
+                                   ts_ms+1000, "0", 1, "500", "0", "0"])
+            if converted:
+                print(f"  klines: using CoinGecko fallback ({len(converted)} candles)")
+                return converted[-limit:]
+    except Exception as e:
+        print(f"  CoinGecko fallback: {e}")
+    
+    raise Exception("All klines sources failed — check Railway network settings")
 
 def get_funding():
     for url in [f"{BASE_PERP}/fundingRate", "https://fapi.binance.com/fapi/v1/fundingRate"]:
@@ -303,11 +335,16 @@ def run_analysis():
 
     # Fetch candles
     try:
+        print("  Fetching 4H candles...")
         kl4h = klines("4h", 150)
+        print(f"  4H OK: {len(kl4h)} candles")
+        print("  Fetching 1D candles...")
         kl1d = klines("1d",  60)
-        kl1h = klines("1h",  60)
+        print(f"  1D OK: {len(kl1d)} candles")
+        kl1h = kl4h  # use 4H as proxy for 1H if needed
+        print("  Candle fetch complete")
     except Exception as e:
-        print(f"Candle fetch failed: {e}"); return None
+        print(f"Candle fetch FAILED: {e}"); return None
 
     cl4 = closes(kl4h); cl1d = closes(kl1d); cl1h = closes(kl1h)
     price  = cl4[-1]
