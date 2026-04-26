@@ -164,32 +164,52 @@ def get_oi_hist():
     raise Exception("OI hist failed")
 
 def get_ls_ratio():
-    r = requests.get(f"{BASE_DATA}/globalLongShortAccountRatio",
-                     params={"symbol":"BTCUSDT","period":"4h","limit":1}, timeout=8)
-    r.raise_for_status()
-    return float(r.json()[0]["longShortRatio"])
+    urls = [
+        f"{BASE_DATA}/globalLongShortAccountRatio",
+        "https://fapi.binance.com/futures/data/globalLongShortAccountRatio",
+    ]
+    for url in urls:
+        try:
+            r = requests.get(url, params={"symbol":"BTCUSDT","period":"4h","limit":1}, timeout=8)
+            if r.ok: return float(r.json()[0]["longShortRatio"])
+        except: continue
+    raise Exception("L/S ratio unavailable")
 
 def get_taker_ratio():
-    r = requests.get(f"{BASE_DATA}/takerlongshortRatio",
-                     params={"symbol":"BTCUSDT","period":"4h","limit":1}, timeout=8)
-    r.raise_for_status()
-    d = r.json()[0]
-    return float(d["buySellRatio"])  # >1 = more buys
+    urls = [
+        f"{BASE_DATA}/takerlongshortRatio",
+        "https://fapi.binance.com/futures/data/takerlongshortRatio",
+    ]
+    for url in urls:
+        try:
+            r = requests.get(url, params={"symbol":"BTCUSDT","period":"4h","limit":1}, timeout=8)
+            if r.ok: return float(r.json()[0]["buySellRatio"])
+        except: continue
+    raise Exception("Taker ratio unavailable")
 
 def get_fear_greed():
-    r = requests.get("https://api.alternative.me/fng/?limit=1", timeout=8)
-    r.raise_for_status()
-    return int(r.json()["data"][0]["value"])
+    urls = ["https://api.alternative.me/fng/?limit=1", "https://api.alternative.me/fng/"]
+    for url in urls:
+        try:
+            r = requests.get(url, timeout=8)
+            if r.ok: return int(r.json()["data"][0]["value"])
+        except: continue
+    raise Exception("Fear & Greed unavailable")
 
 def get_orderbook_imbalance():
     """Bid/ask volume ratio from top 20 levels. >1 = buy pressure."""
-    r = requests.get(f"{BASE_SPOT}/depth",
-                     params={"symbol":"BTCUSDT","limit":20}, timeout=8)
-    r.raise_for_status()
-    ob = r.json()
-    bid_vol = sum(float(b[1]) for b in ob["bids"])
-    ask_vol = sum(float(a[1]) for a in ob["asks"])
-    return bid_vol / ask_vol if ask_vol > 0 else 1.0
+    urls = [f"{BASE_SPOT}/depth", "https://api.binance.com/api/v3/depth",
+            "https://api1.binance.com/api/v3/depth"]
+    for url in urls:
+        try:
+            r = requests.get(url, params={"symbol":"BTCUSDT","limit":20}, timeout=8)
+            if r.ok:
+                ob = r.json()
+                bid_vol = sum(float(b[1]) for b in ob["bids"])
+                ask_vol = sum(float(a[1]) for a in ob["asks"])
+                return bid_vol / ask_vol if ask_vol > 0 else 1.0
+        except: continue
+    raise Exception("Order book unavailable")
 
 # ── Indicator math ─────────────────────────────────────────────────────────
 def closes(kl): return [float(c[4]) for c in kl]
@@ -641,29 +661,33 @@ def win_start_ms():
     return (int(time.time()*1000) // (WIN_SECS*1000)) * (WIN_SECS*1000)
 
 def resolve_pending():
+    conn = None
     try:
         conn = get_db(); cur = conn.cursor()
         now_ms = int(time.time()*1000)
         cur.execute("SELECT id,window_end,direction,open_price FROM predictions WHERE result IS NULL")
-        for row in cur.fetchall():
-            pid,we_ms,direction,open_p = row
+        rows = cur.fetchall()
+        for row in rows:
+            pid,we_ms,direction,open_p = row[0],row[1],row[2],row[3]
             if now_ms < we_ms: continue
             try:
                 kl = klines("4h", 3)
-                close_p = float(kl[-2][4])  # last fully closed candle
+                # Use the last CLOSED candle (index -2 if current is open, or -1 if just closed)
+                close_p = float(kl[-2][4])
                 diff    = close_p - open_p
                 correct = (direction=="UP" and diff>0) or (direction=="DOWN" and diff<0)
                 result  = "correct" if correct else "wrong"
-                conn.execute("UPDATE predictions SET result=?,close_price=?,price_diff=? WHERE id=?",
+                cur.execute("UPDATE predictions SET result=?,close_price=?,price_diff=? WHERE id=?",
                              (result,close_p,diff,pid))
                 conn.commit()
                 emoji = "✅" if correct else "❌"
                 print(f"[{datetime.now(timezone.utc).strftime('%H:%M:%S')}] {emoji} #{pid} {direction} → {result} (close ${close_p:,.2f})")
             except Exception as e:
                 print(f"Resolve #{pid}: {e}")
-        conn.close()
     except Exception as e:
         print(f"resolve_pending: {e}")
+    finally:
+        if conn: conn.close()
 
 def save_prediction(res, ws_s):
     conn = get_db(); cur = conn.cursor()
