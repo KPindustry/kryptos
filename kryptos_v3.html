@@ -523,7 +523,7 @@ body {
           <button class="tf-btn active" id="tf-4h" onclick="switchTF('4h')">4h</button>
         </div>
       </div>
-      <div id="chart" style="height:280px"></div>
+      <div id="chart" style="height:280px;background:#0d1017;border-radius:0 0 8px 8px"></div>
     </div>
   </div>
 
@@ -681,23 +681,33 @@ function connect4H(){
 }
 
 function connectChartWS(tf){
-  if(wsChart){try{wsChart.close();}catch{}}
-  if(tf==='4h'){wsChart=null;return;} // 4H handled by ws4h
-  wsChart=new WebSocket(`wss://fstream.binance.com/ws/btcusdt@kline_${tf}`);
-  wsChart.onmessage=e=>{
-    const k=JSON.parse(e.data).k;
-    if(candleSeries&&curTF===tf){
-      try{
-        const t=Math.floor(parseInt(k.t)/1000);
-        const price=parseFloat(k.c);
-        candleSeries.update({time:t,open:parseFloat(k.o),high:parseFloat(k.h),low:parseFloat(k.l),close:price});
-        if(volSeries)volSeries.update({time:t,value:parseFloat(k.v),color:price>=parseFloat(k.o)?'rgba(16,217,160,.4)':'rgba(240,67,106,.4)'});
-      }catch{}
-    }
-    if(tf==='5m'&&k.x){ c5m.push([k.t,k.o,k.h,k.l,k.c,k.v]); if(c5m.length>100)c5m.shift(); updateMTF(); }
-    if(tf==='1h'&&k.x){ c1h.push([k.t,k.o,k.h,k.l,k.c,k.v]); if(c1h.length>100)c1h.shift(); updateMTF(); }
-  };
-  wsChart.onclose=()=>{ if(curTF===tf)setTimeout(()=>connectChartWS(tf),3000); };
+  // Close existing chart WS gracefully before opening new one
+  if(wsChart){
+    const old=wsChart; wsChart=null;
+    try{ old.onclose=null; old.close(); }catch{}
+  }
+  if(tf==='4h'){ return; } // 4H handled by ws4h
+  setTimeout(()=>{
+    if(curTF!==tf)return; // user switched again, abort
+    try{
+      wsChart=new WebSocket(`wss://fstream.binance.com/ws/btcusdt@kline_${tf}`);
+      wsChart.onmessage=e=>{
+        const k=JSON.parse(e.data).k;
+        if(candleSeries&&curTF===tf){
+          try{
+            const t=Math.floor(parseInt(k.t)/1000);
+            const price=parseFloat(k.c);
+            candleSeries.update({time:t,open:parseFloat(k.o),high:parseFloat(k.h),low:parseFloat(k.l),close:price});
+            if(volSeries)volSeries.update({time:t,value:parseFloat(k.v),color:price>=parseFloat(k.o)?'rgba(16,217,160,.4)':'rgba(240,67,106,.4)'});
+          }catch{}
+        }
+        if(tf==='5m'&&k.x){ c5m.push([k.t,k.o,k.h,k.l,k.c,k.v]); if(c5m.length>100)c5m.shift(); updateMTF(); }
+        if(tf==='1h'&&k.x){ c1h.push([k.t,k.o,k.h,k.l,k.c,k.v]); if(c1h.length>100)c1h.shift(); updateMTF(); }
+      };
+      wsChart.onerror=()=>{ if(wsChart)try{wsChart.close();}catch{} };
+      wsChart.onclose=()=>{ wsChart=null; if(curTF===tf)setTimeout(()=>connectChartWS(tf),4000); };
+    }catch(e){ console.warn('Chart WS error:',e); }
+  }, 200);
 }
 
 // Legacy alias used in init
@@ -725,13 +735,13 @@ async function fetchKlines(tf,limit=100){
 
 async function loadCandles(){
   const [d4h,d1h,d5m,d1d]=await Promise.all([fetchKlines('4h',150),fetchKlines('1h',60),fetchKlines('5m',60),fetchKlines('1d',2)]);
-  if(d4h){c4h=d4h; if(d4h.length){
+  if(d4h&&d4h.length){ c4h=d4h;
     const c=d4h[d4h.length-1];
     $('ph-open').textContent=fP(c[1]);
     $('ph-beat').textContent=fP(c[1]);
-  }}
-  if(d1h)c1h=d1h;
-  if(d5m)c5m=d5m;
+  }
+  if(d1h&&d1h.length)c1h=d1h;
+  if(d5m&&d5m.length)c5m=d5m;
   if(d1d&&d1d.length>=2){
     try{
       $('ph-high').textContent=fP(d1d[d1d.length-1][2]);
@@ -743,17 +753,27 @@ async function loadCandles(){
     }catch{}
   }
   updateMTF();
-  if(curTF==='4h'&&d4h)drawChart(d4h);
-  else if(curTF==='1h'&&d1h)drawChart(d1h);
-  else if(curTF==='5m'&&d5m)drawChart(d5m);
+  // Draw chart — wait for chart to be initialized
+  const drawWhenReady=(data)=>{
+    if(chart&&candleSeries){ drawChart(data); }
+    else{ setTimeout(()=>drawWhenReady(data), 300); }
+  };
+  if(curTF==='4h'&&d4h)drawWhenReady(d4h);
+  else if(curTF==='1h'&&d1h)drawWhenReady(d1h);
+  else if(curTF==='5m'&&d5m)drawWhenReady(d5m);
+  else if(d4h)drawWhenReady(d4h); // fallback: always draw something
   log('Candles loaded','ok');
 }
 
 // ── Chart ──────────────────────────────────────────────────────────────────
 function initChart(){
   const el=$('chart');
-  if(!el||typeof LightweightCharts==='undefined')return;
-  const w=el.offsetWidth||600;
+  if(!el)return;
+  if(typeof LightweightCharts==='undefined'){
+    // Library not loaded yet, retry in 500ms
+    setTimeout(initChart, 500); return;
+  }
+  const w=el.getBoundingClientRect().width||el.offsetWidth||600;
   chart=LightweightCharts.createChart(el,{
     width:w, height:280,
     layout:{background:{type:'Solid',color:'#0d1017'},textColor:'#475569'},
@@ -771,7 +791,7 @@ function initChart(){
     priceFormat:{type:'volume'}, priceScaleId:'vol',
     scaleMargins:{top:0.85,bottom:0},
   });
-  new ResizeObserver(()=>chart.resize(el.offsetWidth,280)).observe(el);
+  new ResizeObserver(()=>{ try{ const w2=el.getBoundingClientRect().width||el.offsetWidth; if(w2>0)chart.resize(w2,280); }catch{} }).observe(el);
 }
 
 function drawChart(data){
@@ -1071,6 +1091,7 @@ async function backfill(){try{const r=await fetch('/api/backfill');const d=await
   await backfill();
   await loadHistory();
   setInterval(()=>{loadCandles();pollMkt();},10*60*1000);
+  setInterval(updateMTF,30*1000); // update MTF every 30s
   setInterval(loadHistory,5*60*1000);
   log('Kryptos v3.0 — 14-factor signal engine ready','ok');
 })();
