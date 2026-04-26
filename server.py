@@ -100,21 +100,36 @@ BASE_PERP  = "https://fapi.binance.com/fapi/v1"
 BASE_DATA  = "https://fapi.binance.com/futures/data"
 
 def klines(interval, limit=150):
-    r = requests.get(f"{BASE_PERP}/klines",
-                     params={"symbol":"BTCUSDT","interval":interval,"limit":limit}, timeout=12)
-    r.raise_for_status(); return r.json()
+    # Try perpetual futures first, fall back to spot
+    urls = [
+        f"{BASE_PERP}/klines",
+        f"{BASE_SPOT}/klines",
+        "https://api1.binance.com/api/v3/klines",
+        "https://api2.binance.com/api/v3/klines",
+        "https://api3.binance.com/api/v3/klines",
+    ]
+    for url in urls:
+        try:
+            r = requests.get(url, params={"symbol":"BTCUSDT","interval":interval,"limit":limit}, timeout=12)
+            if r.ok: return r.json()
+        except: continue
+    raise Exception("All Binance endpoints failed")
 
 def get_funding():
-    r = requests.get(f"{BASE_PERP}/fundingRate",
-                     params={"symbol":"BTCUSDT","limit":3}, timeout=8)
-    r.raise_for_status()
-    data = r.json()
-    return [float(d["fundingRate"]) for d in data]
+    for url in [f"{BASE_PERP}/fundingRate", "https://fapi.binance.com/fapi/v1/fundingRate"]:
+        try:
+            r = requests.get(url, params={"symbol":"BTCUSDT","limit":3}, timeout=8)
+            if r.ok: return [float(d["fundingRate"]) for d in r.json()]
+        except: continue
+    raise Exception("Funding fetch failed")
 
 def get_oi_hist():
-    r = requests.get(f"{BASE_DATA}/openInterestHist",
-                     params={"symbol":"BTCUSDT","period":"4h","limit":10}, timeout=8)
-    r.raise_for_status(); return r.json()
+    for url in [f"{BASE_DATA}/openInterestHist", "https://fapi.binance.com/futures/data/openInterestHist"]:
+        try:
+            r = requests.get(url, params={"symbol":"BTCUSDT","period":"4h","limit":10}, timeout=8)
+            if r.ok: return r.json()
+        except: continue
+    raise Exception("OI hist failed")
 
 def get_ls_ratio():
     r = requests.get(f"{BASE_DATA}/globalLongShortAccountRatio",
